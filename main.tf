@@ -17,7 +17,7 @@ locals {
   public_ips_per_subnet  = pow(2, 32 - tonumber(var.public_subnet_size))
 
   # Calculate the number of IPs needed for all subnets
-  total_ips_needed = (private_ips_per_subnet + public_ips_per_subnet) * local.num_azs
+  total_ips_needed = (local.private_ips_per_subnet + local.public_ips_per_subnet) * local.num_azs
 
   # Calculate the base IP address
   base_ip = cidrhost(var.cidr, 0)
@@ -26,19 +26,19 @@ locals {
   private_bits_needed = ceil(log(local.num_azs * pow(2, tonumber(var.private_subnet_size) - local.vpc_cidr_bits), 2))
 
   # Split the VPC CIDR - first part for private, rest for public
-  private_range = cidrsubnet(var.cidr, private_bits_needed, 0)
-  public_range = cidrsubnet(var.cidr, private_bits_needed, 1)
+  private_range = cidrsubnet(var.cidr, local.private_bits_needed, 0)
+  public_range = cidrsubnet(var.cidr, local.private_bits_needed, 1)
 
   # Generate private subnet CIDRs
   private_subnets = [
     for i in range(local.num_azs) :
-    cidrsubnet(private_range, tonumber(var.private_subnet_size) - (local.vpc_cidr_bits + private_bits_needed), i)
+    cidrsubnet(local.private_range, tonumber(var.private_subnet_size) - (local.vpc_cidr_bits + local.private_bits_needed), i)
   ]
 
   # Generate public subnet CIDRs
   public_subnets = [
     for i in range(local.num_azs) :
-    cidrsubnet(public_range, tonumber(var.public_subnet_size) - (local.vpc_cidr_bits + private_bits_needed), i)
+    cidrsubnet(local.public_range, tonumber(var.public_subnet_size) - (local.vpc_cidr_bits + local.private_bits_needed), i)
   ]
 }
 
