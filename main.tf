@@ -8,37 +8,33 @@ locals {
   # Get the first N AZs
   azs = slice(data.aws_availability_zones.available.names, 0, tonumber(var.num_azs))
 
-  # Calculate the number of bits needed for the subnet mask
-  vpc_cidr_bits = tonumber(split("/", var.cidr)[1])
-  num_azs       = length(local.azs)
 
-  # Calculate the number of IPs per subnet
-  private_ips_per_subnet = pow(2, 32 - tonumber(var.private_subnet_size))
-  public_ips_per_subnet  = pow(2, 32 - tonumber(var.public_subnet_size))
+  vpc_cidr_size = tonumber(split("/", var.cidr)[1])
+  
+  public_newbits  = tonumber(var.public_subnet_size) - local.vpc_cidr_size
+  private_newbits = tonumber(var.private_subnet_size) - local.vpc_cidr_size
 
-  # Calculate the number of IPs needed for all subnets
-  total_ips_needed = (local.private_ips_per_subnet + local.public_ips_per_subnet) * local.num_azs
 
-  # Calculate the base IP address
-  base_ip = cidrhost(var.cidr, 0)
+  # Calculate how many subnets of each type we can fit
+  max_public_subnets  = pow(2, local.public_newbits)
+  max_private_subnets = pow(2, local.private_newbits)
 
-  # Calculate how many bits we need for private subnets
-  private_bits_needed = ceil(log(local.num_azs * pow(2, tonumber(var.private_subnet_size) - local.vpc_cidr_bits), 2))
-
-  # Split the VPC CIDR - first part for private, rest for public
-  private_range = cidrsubnet(var.cidr, local.private_bits_needed, 0)
-  public_range = cidrsubnet(var.cidr, local.private_bits_needed, 1)
-
-  # Generate private subnet CIDRs
-  private_subnets = [
-    for i in range(local.num_azs) :
-    cidrsubnet(local.private_range, tonumber(var.private_subnet_size) - (local.vpc_cidr_bits + local.private_bits_needed), i)
+  # Calculate offset for private subnets to avoid overlap with public subnets
+  # Each private subnet contains 2^(public_newbits - private_newbits) public subnets
+  # We need to calculate how many private-subnet-sized blocks the public subnets consume
+  private_subnet_offset = local.public_newbits >= local.private_newbits ? ceil(tonumber(var.num_azs) / pow(2, local.private_newbits - local.public_newbits)) : tonumber(var.num_azs) * pow(2, local.public_newbits - local.private_newbits)
+  
+  # Generate subnet CIDRs
+  # Public subnets start at index 0
+  public_subnet_cidrs = [
+    for i in range(tonumber(var.num_azs)) :
+    cidrsubnet(var.cidr, local.public_newbits, i)
   ]
-
-  # Generate public subnet CIDRs
-  public_subnets = [
-    for i in range(local.num_azs) :
-    cidrsubnet(local.public_range, tonumber(var.public_subnet_size) - (local.vpc_cidr_bits + local.private_bits_needed), i)
+  
+  # Private subnets start after public subnets to avoid overlap
+  private_subnet_cidrs = [
+    for i in range(tonumber(var.num_azs)) :
+    cidrsubnet(var.cidr, local.private_newbits, i + local.private_subnet_offset)
   ]
 }
 
@@ -49,8 +45,8 @@ module "vpc" {
   cidr = var.cidr
 
   azs             = local.azs
-  private_subnets = local.private_subnets
-  public_subnets  = local.public_subnets
+  private_subnets = local.private_subnet_cidrs
+  public_subnets  = local.public_subnet_cidrs
 
   enable_nat_gateway = true
 
