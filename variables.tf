@@ -11,18 +11,18 @@ variable "cidr" {
 
 variable "num_azs" {
   description = "Number of AZs to use"
-  type        = string
-  default     = "3"
+  type        = number
+  default     = 3
 }
 
 variable "private_subnet_size" {
   description = "The size of each private subnet in bits (e.g., 20 for /20)"
-  type        = string
-  default     = "20"
+  type        = number
+  default     = 20
 }
 
 variable "public_subnet_size" {
   description = "The size of each public subnet in bits (e.g., 24 for /24)"
-  type        = string
-  default     = "24"
+  type        = number
+  default     = 24
 }
